@@ -179,7 +179,7 @@ with aba1:
         st.session_state.config['periodos'] = st.number_input("Horários (Aulas) por dia", min_value=1, max_value=12, value=st.session_state.config.get('periodos', 9))
     with col2:
         if st.session_state.config.get('escola_logo'):
-            st.write("**Logótipo Guardado:**")
+            st.write("**Logotipo Guardado:**")
             st.image(st.session_state.config['escola_logo'], width=150)
             if st.button("🗑️ Remover Logotipo"):
                 st.session_state.config['escola_logo'] = None
