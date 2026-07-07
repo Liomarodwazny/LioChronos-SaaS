@@ -45,7 +45,7 @@ CLIENTES_CADASTRADOS = {
     "admin": "sabereducativo2026",
     "carrossel": "carrossel123",
     "escola_teste": "teste123",
-    "coruje": "coruja2026"
+    "coruja": "coruja2026"
 }
 
 if not st.session_state['autenticado']:
