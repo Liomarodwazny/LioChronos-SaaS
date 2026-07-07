@@ -433,8 +433,8 @@ with aba6:
         st.session_state.horario_final = None
         st.rerun()
 
-    if col_gerar.button("🚀 Iniciar Motor Google OR-Tools", type="primary", use_container_width=True):
-        with st.spinner("A processar restrições e otimizar horários (Isto pode levar até 20s para procurar a solução com menos janelas)..."):
+    if col_gerar.button("🚀 Gerar Horário", type="primary", use_container_width=True):
+        with st.spinner("A processar restrições e otimizar horários (Isto pode levar até 120s para procurar a solução com menos janelas)..."):
             model = cp_model.CpModel()
             grade_vars = {}
             dias = st.session_state.config.get('dias', [])
