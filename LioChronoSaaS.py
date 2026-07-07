@@ -181,11 +181,11 @@ with aba1:
         if st.session_state.config.get('escola_logo'):
             st.write("**Logótipo Guardado:**")
             st.image(st.session_state.config['escola_logo'], width=150)
-            if st.button("🗑️ Remover Logótipo"):
+            if st.button("🗑️ Remover Logotipo"):
                 st.session_state.config['escola_logo'] = None
                 st.rerun()
                 
-        logo_upload = st.file_uploader("Carregar novo Logótipo (Opcional - Usado no PDF)", type=["png", "jpg", "jpeg"])
+        logo_upload = st.file_uploader("Carregar novo Logotipo (Opcional - Usado no PDF)", type=["png", "jpg", "jpeg"])
         if logo_upload:
             b64 = base64.b64encode(logo_upload.getvalue()).decode()
             st.session_state.config['escola_logo'] = f"data:image/png;base64,{b64}"
@@ -422,7 +422,7 @@ with aba6:
         st.session_state.horario_final = None
         st.rerun()
 
-    if col_gerar.button("🚀 Iniciar Motor Google OR-Tools", type="primary", use_container_width=True):
+    if col_gerar.button("🚀 Gerar Horário", type="primary", use_container_width=True):
         with st.spinner("A processar restrições e aulas fixadas..."):
             model = cp_model.CpModel()
             grade_vars = {}
