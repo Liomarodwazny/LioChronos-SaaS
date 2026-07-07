@@ -435,7 +435,7 @@ with aba6:
         st.session_state.horario_final = None
         st.rerun()
 
-    if col_gerar.button("🚀 Iniciar Motor Google OR-Tools", type="primary", use_container_width=True):
+    if col_gerar.button("🚀 Gerar Horário", type="primary", use_container_width=True):
         mensagem_spinner = "A processar e otimizar horários (Isto pode levar até 60s)..." if otimizar_janelas else "A procurar uma solução viável (Modo Rápido)..."
         with st.spinner(mensagem_spinner):
             model = cp_model.CpModel()
