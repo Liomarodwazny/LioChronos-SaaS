@@ -14,7 +14,7 @@ from fpdf import FPDF
 # ==========================================
 # 1. CONFIGURAÇÃO VISUAL E CONEXÃO SUPABASE
 # ==========================================
-st.set_page_config(page_title="LioChronos - Horário Escolar", page_icon="🧩", layout="wide")
+st.set_page_config(page_title="LioChronos - Horário escolar", page_icon="🧩", layout="wide")
 
 st.markdown("""
     <style>
@@ -44,8 +44,7 @@ if 'autenticado' not in st.session_state:
 CLIENTES_CADASTRADOS = {
     "admin": "sabereducativo2026",
     "carrossel": "carrossel123",
-    "escola_teste": "teste123",
-    "coruja": "coruja2026"
+    "escola_teste": "teste123"
 }
 
 if not st.session_state['autenticado']:
@@ -224,7 +223,6 @@ with aba3:
         nome_turma = col_t.text_input("Nome da Turma (Ex: 6º Ano A)")
         if col_b.form_submit_button("Adicionar"):
             if nome_turma:
-                # Validação para evitar turmas duplicadas que quebram o Excel
                 nomes_existentes = [t['nome'].strip().lower() for t in st.session_state.turmas]
                 if nome_turma.strip().lower() in nomes_existentes:
                     st.error(f"❌ A turma '{nome_turma}' já existe! Nomes duplicados impedem a exportação.")
@@ -239,7 +237,6 @@ with aba3:
             
             if c2.button("📋 Duplicar", key=f"dup_t_{t['id']}", help="Copia a turma e as suas disciplinas"):
                 novo_nome = f"{t['nome']} (Cópia)"
-                # Garante que até a cópia tem um nome único
                 while novo_nome.strip().lower() in [tx['nome'].strip().lower() for tx in st.session_state.turmas]:
                     novo_nome += " *"
                 
@@ -426,6 +423,10 @@ with aba6:
     total_aulas = sum(g.get('aulasSemana', 0) for g in st.session_state.grade)
     st.write(f"Total de regras a calcular: **{total_aulas} aulas semanais.**")
     
+    st.markdown("---")
+    otimizar_janelas = st.toggle("✨ Otimizar Horários (Evitar buracos para os professores)", value=False, help="Se ativado, o sistema usará cálculos complexos para evitar janelas. Pode demorar até 60 segundos. Se desligado, gera o horário em 5 segundos.")
+    st.markdown("<br>", unsafe_allow_html=True)
+    
     col_gerar, col_limpar = st.columns([3, 1])
     
     if col_limpar.button("🧹 Limpar Horário Fixo", help="Remove todas as aulas travadas manualmente."):
@@ -433,8 +434,9 @@ with aba6:
         st.session_state.horario_final = None
         st.rerun()
 
-    if col_gerar.button("🚀 Gerar Horário", type="primary", use_container_width=True):
-        with st.spinner("A processar restrições e otimizar horários (Isto pode levar até 120s para procurar a solução com menos janelas)..."):
+    if col_gerar.button("🚀 Iniciar Motor Google OR-Tools", type="primary", use_container_width=True):
+        mensagem_spinner = "A processar e otimizar horários (Isto pode levar até 60s)..." if otimizar_janelas else "A procurar uma solução viável (Modo Rápido)..."
+        with st.spinner(mensagem_spinner):
             model = cp_model.CpModel()
             grade_vars = {}
             dias = st.session_state.config.get('dias', [])
@@ -442,7 +444,6 @@ with aba6:
             num_periodos = st.session_state.config.get('periodos', 9)
             grade_reqs = []
             
-            # Expande as regras (uma regra de 3 aulas vira 3 requisitos individuais para permitir rastreamento)
             for req_original in st.session_state.grade:
                 for a in range(req_original.get('aulasSemana', 0)):
                     nova_req = req_original.copy()
@@ -454,24 +455,20 @@ with aba6:
                     for i, req in enumerate(grade_reqs):
                         grade_vars[(d, p, i)] = model.NewBoolVar(f'v_{d}_{p}_{i}')
 
-            # 1. Cada requisito deve ser agendado exatamente uma vez
             for i, req in enumerate(grade_reqs):
                 model.Add(sum(grade_vars[(d, p, i)] for d in range(num_dias) for p in range(num_periodos)) == 1)
 
-            # 2. Conflito de Turma (Máximo 1 aula por período por turma)
             for d in range(num_dias):
                 for p in range(num_periodos):
                     for t_id in [t['id'] for t in st.session_state.turmas]:
                         model.AddAtMostOne(grade_vars[(d, p, i)] for i, r in enumerate(grade_reqs) if r['turmaId'] == t_id)
 
-            # 3. Conflito de Professor (Máximo 1 aula por período por prof)
             for d in range(num_dias):
                 for p in range(num_periodos):
                     for p_id in [p['id'] for p in st.session_state.professores]:
                         reqs_do_prof = [i for i, r in enumerate(grade_reqs) if r['professorId'] == p_id or r.get('professorIdSecundario') == p_id]
                         model.AddAtMostOne(grade_vars[(d, p, i)] for i in reqs_do_prof)
 
-            # 4. Indisponibilidade do Professor
             for prof in st.session_state.professores:
                 reqs_do_prof = [i for i, r in enumerate(grade_reqs) if r['professorId'] == prof['id'] or r.get('professorIdSecundario') == prof['id']]
                 for indis in prof.get('indisponibilidade', []):
@@ -482,7 +479,6 @@ with aba6:
                                 model.Add(grade_vars[(dias.index(dia_str), int(per_str) - 1, i)] == 0)
                     except ValueError: pass
 
-            # 5. Tamanho do Bloco Diário Máximo
             for req_orig in st.session_state.grade:
                 indices_desta_regra = [i for i, r in enumerate(grade_reqs) if r['id'] == req_orig['id']]
                 limite_diario = max(req_orig.get('blocoTamanho', 1), math.ceil(req_orig.get('aulasSemana', 0) / max(1, num_dias)))
@@ -490,54 +486,53 @@ with aba6:
                     model.Add(sum(grade_vars[(d, p, i)] for p in range(num_periodos) for i in indices_desta_regra) <= limite_diario)
 
             # =========================================================
-            # NOVA FUNÇÃO OBJETIVO: MINIMIZAR JANELAS DOS PROFESSORES
+            # OTIMIZAÇÃO OPCIONAL (JANELAS DOS PROFESSORES)
             # =========================================================
-            objective_terms = []
-            for prof in st.session_state.professores:
-                p_id = prof['id']
-                reqs_do_prof = [i for i, r in enumerate(grade_reqs) if r['professorId'] == p_id or r.get('professorIdSecundario') == p_id]
-                
-                if not reqs_do_prof:
-                    continue
+            if otimizar_janelas:
+                objective_terms = []
+                for prof in st.session_state.professores:
+                    p_id = prof['id']
+                    reqs_do_prof = [i for i, r in enumerate(grade_reqs) if r['professorId'] == p_id or r.get('professorIdSecundario') == p_id]
                     
-                for d in range(num_dias):
-                    ensina_no_periodo = []
-                    for p in range(num_periodos):
-                        ensina = model.NewBoolVar(f'ensina_{p_id}_{d}_{p}')
-                        model.Add(ensina == sum(grade_vars[(d, p, i)] for i in reqs_do_prof))
-                        ensina_no_periodo.append(ensina)
+                    if not reqs_do_prof:
+                        continue
                         
-                    trabalha_neste_dia = model.NewBoolVar(f'trabalha_{p_id}_{d}')
-                    model.AddMaxEquality(trabalha_neste_dia, ensina_no_periodo)
-                    
-                    # Penalidade leve para fazer o professor ir menos dias à escola (compacta a grade)
-                    objective_terms.append(trabalha_neste_dia * 5)
-                    
-                    primeira_aula = model.NewIntVar(0, num_periodos - 1, f'primeira_{p_id}_{d}')
-                    ultima_aula = model.NewIntVar(0, num_periodos - 1, f'ultima_{p_id}_{d}')
-                    
-                    for p in range(num_periodos):
-                        model.Add(primeira_aula <= p).OnlyEnforceIf(ensina_no_periodo[p])
-                        model.Add(ultima_aula >= p).OnlyEnforceIf(ensina_no_periodo[p])
+                    for d in range(num_dias):
+                        ensina_no_periodo = []
+                        for p in range(num_periodos):
+                            ensina = model.NewBoolVar(f'ensina_{p_id}_{d}_{p}')
+                            model.Add(ensina == sum(grade_vars[(d, p, i)] for i in reqs_do_prof))
+                            ensina_no_periodo.append(ensina)
+                            
+                        trabalha_neste_dia = model.NewBoolVar(f'trabalha_{p_id}_{d}')
+                        model.AddMaxEquality(trabalha_neste_dia, ensina_no_periodo)
                         
-                    model.Add(primeira_aula == 0).OnlyEnforceIf(trabalha_neste_dia.Not())
-                    model.Add(ultima_aula == 0).OnlyEnforceIf(trabalha_neste_dia.Not())
-                    
-                    span = model.NewIntVar(0, num_periodos, f'span_{p_id}_{d}')
-                    model.Add(span == ultima_aula - primeira_aula + 1).OnlyEnforceIf(trabalha_neste_dia)
-                    model.Add(span == 0).OnlyEnforceIf(trabalha_neste_dia.Not())
-                    
-                    total_aulas_dia = model.NewIntVar(0, num_periodos, f'total_aulas_{p_id}_{d}')
-                    model.Add(total_aulas_dia == sum(ensina_no_periodo))
-                    
-                    janelas = model.NewIntVar(0, num_periodos, f'janelas_{p_id}_{d}')
-                    model.Add(janelas == span - total_aulas_dia)
-                    
-                    # Penalidade pesada por cada "janela" (buraco) na agenda do dia
-                    objective_terms.append(janelas * 20)
+                        objective_terms.append(trabalha_neste_dia * 5)
+                        
+                        primeira_aula = model.NewIntVar(0, num_periodos - 1, f'primeira_{p_id}_{d}')
+                        ultima_aula = model.NewIntVar(0, num_periodos - 1, f'ultima_{p_id}_{d}')
+                        
+                        for p in range(num_periodos):
+                            model.Add(primeira_aula <= p).OnlyEnforceIf(ensina_no_periodo[p])
+                            model.Add(ultima_aula >= p).OnlyEnforceIf(ensina_no_periodo[p])
+                            
+                        model.Add(primeira_aula == 0).OnlyEnforceIf(trabalha_neste_dia.Not())
+                        model.Add(ultima_aula == 0).OnlyEnforceIf(trabalha_neste_dia.Not())
+                        
+                        span = model.NewIntVar(0, num_periodos, f'span_{p_id}_{d}')
+                        model.Add(span == ultima_aula - primeira_aula + 1).OnlyEnforceIf(trabalha_neste_dia)
+                        model.Add(span == 0).OnlyEnforceIf(trabalha_neste_dia.Not())
+                        
+                        total_aulas_dia = model.NewIntVar(0, num_periodos, f'total_aulas_{p_id}_{d}')
+                        model.Add(total_aulas_dia == sum(ensina_no_periodo))
+                        
+                        janelas = model.NewIntVar(0, num_periodos, f'janelas_{p_id}_{d}')
+                        model.Add(janelas == span - total_aulas_dia)
+                        
+                        objective_terms.append(janelas * 20)
 
-            if objective_terms:
-                model.Minimize(sum(objective_terms))
+                if objective_terms:
+                    model.Minimize(sum(objective_terms))
 
             # =========================================================
             # MAGIA DO AJUSTE MANUAL: FORÇAR POSIÇÕES JÁ FIXADAS
@@ -555,7 +550,8 @@ with aba6:
                     except: pass
 
             solver = cp_model.CpSolver()
-            solver.parameters.max_time_in_seconds = 20.0 # Mais tempo para ele tentar "Otimizar" a grade
+            # Ajusta o tempo limite com base na otimização
+            solver.parameters.max_time_in_seconds = 60.0 if otimizar_janelas else 20.0
             
             status = solver.Solve(model)
 
@@ -576,10 +572,10 @@ with aba6:
                                     'Professor': prof_str
                                 })
                 st.session_state.horario_final = pd.DataFrame(resultado)
-                if status == cp_model.OPTIMAL:
+                if status == cp_model.OPTIMAL and otimizar_janelas:
                     st.success("✨ Solução Perfeita Encontrada! O motor otimizou ao máximo para evitar buracos para os professores.")
                 else:
-                    st.success("✨ Solução Encontrada! (O motor encontrou uma grade viável no limite de tempo).")
+                    st.success("✨ Solução Encontrada! (Horário gerado com sucesso).")
             else:
                 # =========================================================
                 # DIAGNÓSTICO INTELIGENTE COM RELAXAMENTO
@@ -594,14 +590,13 @@ with aba6:
                         for i, req in enumerate(grade_reqs):
                             d_vars[(d, p, i)] = diag_model.NewBoolVar(f'dv_{d}_{p}_{i}')
                             
-                # Permite não agendar a aula, mas maximiza o agendamento
                 req_scheduled = []
                 for i, req in enumerate(grade_reqs):
                     agendada = diag_model.NewBoolVar(f'agendada_{i}')
                     diag_model.Add(sum(d_vars[(d, p, i)] for d in range(num_dias) for p in range(num_periodos)) == agendada)
                     req_scheduled.append(agendada)
                     
-                # Re-adiciona as restrições fixas
+                # Restrições de conflito (Turmas e Professores)
                 for d in range(num_dias):
                     for p in range(num_periodos):
                         for t_id in [t['id'] for t in st.session_state.turmas]:
@@ -610,6 +605,7 @@ with aba6:
                             reqs_do_prof = [i for i, r in enumerate(grade_reqs) if r['professorId'] == p_id or r.get('professorIdSecundario') == p_id]
                             diag_model.AddAtMostOne(d_vars[(d, p, i)] for i in reqs_do_prof)
 
+                # Indisponibilidade
                 for prof in st.session_state.professores:
                     reqs_do_prof = [i for i, r in enumerate(grade_reqs) if r['professorId'] == prof['id'] or r.get('professorIdSecundario') == prof['id']]
                     for indis in prof.get('indisponibilidade', []):
@@ -619,6 +615,13 @@ with aba6:
                                 for i in reqs_do_prof:
                                     diag_model.Add(d_vars[(dias.index(dia_str), int(per_str) - 1, i)] == 0)
                         except: pass
+                
+                # ADICIONADO: Tamanho do Bloco no Diagnóstico (Garante que o Raio-X é fiel)
+                for req_orig in st.session_state.grade:
+                    indices_desta_regra = [i for i, r in enumerate(grade_reqs) if r['id'] == req_orig['id']]
+                    limite_diario = max(req_orig.get('blocoTamanho', 1), math.ceil(req_orig.get('aulasSemana', 0) / max(1, num_dias)))
+                    for d in range(num_dias):
+                        diag_model.Add(sum(d_vars[(d, p, i)] for p in range(num_periodos) for i in indices_desta_regra) <= limite_diario)
 
                 if st.session_state.horario_fixo:
                     for row_fixa in st.session_state.horario_fixo:
@@ -639,7 +642,7 @@ with aba6:
                 if diag_status in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
                     aulas_nao_agendadas = [req for i, req in enumerate(grade_reqs) if diag_solver.Value(req_scheduled[i]) == 0]
                     
-                    st.error(f"❌ **Raio-X Concluído:** O sistema conseguiu encaixar {int(diag_solver.ObjectiveValue())} aulas, mas foi **impossível** agendar as seguintes {len(aulas_nao_agendadas)} aulas (devido a bloqueios na malha ou choques de turmas):")
+                    st.error(f"❌ **Raio-X Concluído:** O sistema conseguiu encaixar {int(diag_solver.ObjectiveValue())} aulas, mas foi **impossível** agendar as seguintes {len(aulas_nao_agendadas)} aulas (devido a bloqueios na malha, tamanho de bloco excedido ou choques de turmas):")
                     for req in aulas_nao_agendadas:
                         prof = get_nome(st.session_state.professores, req['professorId'])
                         disc = get_nome(st.session_state.disciplinas, req['disciplinaId'])
