@@ -44,8 +44,7 @@ if 'autenticado' not in st.session_state:
 CLIENTES_CADASTRADOS = {
     "admin": "sabereducativo2026",
     "carrossel": "carrossel123",
-    "escola_teste": "teste123",
-    "coruja": "coruja2026"
+    "escola_teste": "teste123"
 }
 
 if not st.session_state['autenticado']:
@@ -188,11 +187,21 @@ with aba1:
         st.session_state.config['escola_nome'] = st.text_input("Nome da Escola (Aparece no PDF)", value=st.session_state.config.get('escola_nome', ''))
         st.session_state.config['periodos'] = st.number_input("Horários (Aulas) por dia", min_value=1, max_value=12, value=st.session_state.config.get('periodos', 9))
     with col2:
-        logo_upload = st.file_uploader("Logótipo da Escola (Opcional - Usado no PDF)", type=["png", "jpg", "jpeg"])
+        # MOSTRA A IMAGEM SE ELA JÁ EXISTIR NA MEMÓRIA/NUVEM
+        if st.session_state.config.get('escola_logo'):
+            st.write("**Logótipo Guardado:**")
+            st.image(st.session_state.config['escola_logo'], width=150)
+            if st.button("🗑️ Remover Logótipo"):
+                st.session_state.config['escola_logo'] = None
+                st.rerun()
+                
+        # CAIXA PARA CARREGAR UMA NOVA IMAGEM
+        logo_upload = st.file_uploader("Carregar novo Logótipo (Opcional - Usado no PDF)", type=["png", "jpg", "jpeg"])
         if logo_upload:
             b64 = base64.b64encode(logo_upload.getvalue()).decode()
             st.session_state.config['escola_logo'] = f"data:image/png;base64,{b64}"
-            st.success("Logótipo carregado com sucesso!")
+            st.success("Logótipo carregado com sucesso! Lembre-se de Guardar na Nuvem.")
+            st.rerun()
         
         opcoes_dias = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
         dias_salvos = [d for d in st.session_state.config.get('dias', []) if d in opcoes_dias]
@@ -396,14 +405,14 @@ with aba5:
                             profs_validos = {p['id']: p['nome'] for p in st.session_state.professores if item['disciplinaId'] in p.get('disciplinas', [])}
                             
                             idx_prof = list(profs_validos.keys()).index(item['professorId']) if item['professorId'] in profs_validos else 0
-                            novo_prof = ec1.selectbox("Prof. Titular", options=list(profs_validos.keys()), format_func=lambda x: profs_validos.get(x, "Nenhum"), index=idx_prof)
+                            novo_prof = ec1.selectbox("Prof. Titular", options=list(profs_validos.keys()), format_func=lambda x: profs_validos.get(x, "Nenhum"), index=idx_prof, key=f"ep_{item['id']}")
 
                             op_codoc = [None] + list(profs_validos.keys())
                             idx_sec = op_codoc.index(item.get('professorIdSecundario')) if item.get('professorIdSecundario') in op_codoc else 0
-                            novo_sec = ec2.selectbox("Co-docente", options=op_codoc, format_func=lambda x: profs_validos.get(x, "Nenhum"), index=idx_sec)
+                            novo_sec = ec2.selectbox("Co-docente", options=op_codoc, format_func=lambda x: profs_validos.get(x, "Nenhum"), index=idx_sec, key=f"es_{item['id']}")
 
-                            novas_aulas = ec3.number_input("Aulas/Semana", min_value=1, max_value=20, value=item['aulasSemana'])
-                            novo_bloco = ec3.selectbox("Bloco Máximo", [1, 2, 3], index=[1, 2, 3].index(item.get('blocoTamanho', 1)))
+                            novas_aulas = ec3.number_input("Aulas/Semana", min_value=1, max_value=20, value=item['aulasSemana'], key=f"ea_{item['id']}")
+                            novo_bloco = ec3.selectbox("Bloco Máximo", [1, 2, 3], index=[1, 2, 3].index(item.get('blocoTamanho', 1)), key=f"eb_{item['id']}")
 
                             sc1, sc2 = st.columns([1, 4])
                             if sc1.form_submit_button("💾 Guardar", type="primary"):
