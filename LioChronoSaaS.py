@@ -105,7 +105,7 @@ def get_nome(lista, _id): return next((item['nome'] for item in lista if item['i
 def limpar_texto_pdf(texto): return str(texto).replace(" \n", " - ").encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 4. BARRA LATERAL (SINCRONIZAÇÃO NUVEM)
+# 4. BARRA LATERAL (SINCRONIZAÇÃO NUVEM E JSON)
 # ==========================================
 with st.sidebar:
     st.header(f"👤 {st.session_state.get('cliente_atual', '').capitalize()}")
@@ -124,6 +124,7 @@ with st.sidebar:
         'grade': st.session_state.grade
     }
     
+    # --- BOTÃO DE GUARDAR NA NUVEM ---
     if banco_ligado:
         st.success("🟢 Conectado ao Supabase")
         if st.button("💾 Guardar na Nuvem", type="primary", use_container_width=True, help="Grava todas as turmas e professores nos servidores centrais."):
@@ -135,31 +136,37 @@ with st.sidebar:
                 st.error("❌ Erro de comunicação com o banco de dados.")
     else:
         st.warning("⚠️ Banco de dados offline. A trabalhar no modo local.")
-        st.info("Descarregue o ficheiro para não perder o trabalho.")
-        json_str = json.dumps(dados_export, indent=2)
-        st.download_button(
-            label="⭳ Descarregar Backup (.json)", 
-            data=json_str, 
-            file_name="LioChronos_Backup.json", 
-            mime="application/json", 
-            use_container_width=True
-        )
         
-        st.markdown("---")
-        arquivo_importado = st.file_uploader("Carregar JSON", type=["json"])
-        if arquivo_importado is not None:
-            if st.button("Restaurar Dados do Ficheiro", use_container_width=True):
-                try:
-                    dados = json.load(arquivo_importado)
-                    st.session_state.config = dados.get('config', st.session_state.config)
-                    st.session_state.disciplinas = dados.get('disciplinas', [])
-                    st.session_state.turmas = dados.get('turmas', [])
-                    st.session_state.professores = dados.get('professores', [])
-                    st.session_state.grade = dados.get('grade', [])
-                    st.success("✅ Dados restaurados!")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Erro: {e}")
+    st.markdown("---")
+    
+    # --- BOTÕES DE EXPORTAR / IMPORTAR JSON ---
+    st.subheader("⬇️ Exportar Backup")
+    json_str = json.dumps(dados_export, indent=2)
+    st.download_button(
+        label="⭳ Descarregar Arquivo (.json)", 
+        data=json_str, 
+        file_name="LioChronos_Backup.json", 
+        mime="application/json", 
+        use_container_width=True
+    )
+    
+    st.markdown("---")
+    st.subheader("⬆️ Importar Backup")
+    st.info("Pode carregar um ficheiro .json antigo para o sistema.")
+    arquivo_importado = st.file_uploader("Carregar JSON", type=["json"])
+    if arquivo_importado is not None:
+        if st.button("Restaurar Dados do Ficheiro", use_container_width=True):
+            try:
+                dados = json.load(arquivo_importado)
+                st.session_state.config = dados.get('config', st.session_state.config)
+                st.session_state.disciplinas = dados.get('disciplinas', [])
+                st.session_state.turmas = dados.get('turmas', [])
+                st.session_state.professores = dados.get('professores', [])
+                st.session_state.grade = dados.get('grade', [])
+                st.success("✅ Dados restaurados! (Lembre-se de Guardar na Nuvem)")
+                st.rerun()
+            except Exception as e:
+                st.error(f"Erro ao ler ficheiro: {e}")
 
 # ==========================================
 # 5. INTERFACE DE ABAS
@@ -355,7 +362,6 @@ with aba5:
         
         if grade_turma:
             for item in grade_turma:
-                # --- MODO DE VISUALIZAÇÃO ---
                 c1, c2, c3, c4, c5, c6 = st.columns([3, 3, 2, 2, 1, 1])
                 c1.write(get_nome(st.session_state.disciplinas, item['disciplinaId']))
                 
@@ -366,7 +372,6 @@ with aba5:
                 c3.write(f"Aulas: {item['aulasSemana']}")
                 c4.write(f"Bloco: {item.get('blocoTamanho', 1)}x")
                 
-                # --- NOVO BOTÃO EDITAR ---
                 if c5.button("✏️", key=f"edit_g_{item['id']}", help="Editar esta regra"):
                     st.session_state.edit_grade_id = item['id']
                     st.rerun()
@@ -375,7 +380,6 @@ with aba5:
                     st.session_state.grade = [x for x in st.session_state.grade if x['id'] != item['id']]
                     st.rerun()
                     
-                # --- MODO DE EDIÇÃO (Abre se clicar no botão) ---
                 if st.session_state.get('edit_grade_id') == item['id']:
                     with st.container():
                         st.info(f"✏️ **A editar a regra de:** {get_nome(st.session_state.disciplinas, item['disciplinaId'])}")
