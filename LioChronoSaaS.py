@@ -44,8 +44,7 @@ if 'autenticado' not in st.session_state:
 CLIENTES_CADASTRADOS = {
     "admin": "sabereducativo2026",
     "carrossel": "carrossel123",
-    "escola_teste": "teste123",
-    "coruja": "coruja2026"
+    "escola_teste": "teste123"
 }
 
 if not st.session_state['autenticado']:
@@ -130,11 +129,14 @@ with st.sidebar:
         st.success("🟢 Conectado ao Supabase")
         if st.button("💾 Guardar na Nuvem", type="primary", use_container_width=True, help="Grava todas as turmas e professores nos servidores centrais."):
             try:
-                # O Upsert cria a gaveta do cliente se for novo, ou atualiza por cima se já existir
-                supabase.table('clientes_dados').upsert({"cliente": st.session_state['cliente_atual'], "dados": dados_export}).execute()
+                # O Upsert com on_conflict cria a gaveta se for novo, ou atualiza se já existir
+                supabase.table('clientes_dados').upsert(
+                    {"cliente": st.session_state['cliente_atual'], "dados": dados_export}, 
+                    on_conflict="cliente"
+                ).execute()
                 st.toast("✅ Trabalho guardado em segurança na nuvem!", icon="☁️")
             except Exception as e:
-                st.error("❌ Erro de comunicação com o banco de dados.")
+                st.error(f"❌ Erro de comunicação: {e}")
     else:
         st.warning("⚠️ Banco de dados offline. A trabalhar no modo local.")
         
@@ -363,6 +365,7 @@ with aba5:
         
         if grade_turma:
             for item in grade_turma:
+                # --- MODO DE VISUALIZAÇÃO ---
                 c1, c2, c3, c4, c5, c6 = st.columns([3, 3, 2, 2, 1, 1])
                 c1.write(get_nome(st.session_state.disciplinas, item['disciplinaId']))
                 
@@ -373,6 +376,7 @@ with aba5:
                 c3.write(f"Aulas: {item['aulasSemana']}")
                 c4.write(f"Bloco: {item.get('blocoTamanho', 1)}x")
                 
+                # --- BOTÃO EDITAR ---
                 if c5.button("✏️", key=f"edit_g_{item['id']}", help="Editar esta regra"):
                     st.session_state.edit_grade_id = item['id']
                     st.rerun()
@@ -381,6 +385,7 @@ with aba5:
                     st.session_state.grade = [x for x in st.session_state.grade if x['id'] != item['id']]
                     st.rerun()
                     
+                # --- MODO DE EDIÇÃO (Abre se clicar no botão) ---
                 if st.session_state.get('edit_grade_id') == item['id']:
                     with st.container():
                         st.info(f"✏️ **A editar a regra de:** {get_nome(st.session_state.disciplinas, item['disciplinaId'])}")
