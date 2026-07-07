@@ -165,7 +165,7 @@ with st.sidebar:
 # ==========================================
 # 5. INTERFACE DE ABAS
 # ==========================================
-st.title("⚙️ LioChronos - Gestão Escolar")
+st.title("⚙️ LioChronos - Horário Escolar")
 
 aba1, aba2, aba3, aba4, aba5, aba6 = st.tabs([
     "⚙️ Configuração", "📚 Disciplinas", "🏫 Turmas", "👩‍🏫 Professores", "📅 Grade Curricular", "🚀 Gerador"
