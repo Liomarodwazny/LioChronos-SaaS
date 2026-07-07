@@ -14,7 +14,7 @@ from fpdf import FPDF
 # ==========================================
 # 1. CONFIGURAÇÃO VISUAL E CONEXÃO SUPABASE
 # ==========================================
-st.set_page_config(page_title="LioChronos - Gestão Escolar", layout="wide")
+st.set_page_config(page_title="LioChronos - Horário Escolar", layout="wide")
 
 st.markdown("""
     <style>
