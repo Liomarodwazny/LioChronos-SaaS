@@ -44,8 +44,7 @@ if 'autenticado' not in st.session_state:
 CLIENTES_CADASTRADOS = {
     "admin": "sabereducativo2026",
     "carrossel": "carrossel123",
-    "escola_teste": "teste123",
-    "coruja": "coruja2026"
+    "escola_teste": "teste123"
 }
 
 if not st.session_state['autenticado']:
@@ -182,11 +181,11 @@ with aba1:
         if st.session_state.config.get('escola_logo'):
             st.write("**Logótipo Guardado:**")
             st.image(st.session_state.config['escola_logo'], width=150)
-            if st.button("🗑️ Remover Logotipo"):
+            if st.button("🗑️ Remover Logótipo"):
                 st.session_state.config['escola_logo'] = None
                 st.rerun()
                 
-        logo_upload = st.file_uploader("Carregar novo Logotipo (Opcional - Usado no PDF)", type=["png", "jpg", "jpeg"])
+        logo_upload = st.file_uploader("Carregar novo Logótipo (Opcional - Usado no PDF)", type=["png", "jpg", "jpeg"])
         if logo_upload:
             b64 = base64.b64encode(logo_upload.getvalue()).decode()
             st.session_state.config['escola_logo'] = f"data:image/png;base64,{b64}"
@@ -423,7 +422,7 @@ with aba6:
         st.session_state.horario_final = None
         st.rerun()
 
-    if col_gerar.button("🚀 Gerar Horário", type="primary", use_container_width=True):
+    if col_gerar.button("🚀 Iniciar Motor Google OR-Tools", type="primary", use_container_width=True):
         with st.spinner("A processar restrições e aulas fixadas..."):
             model = cp_model.CpModel()
             grade_vars = {}
@@ -520,7 +519,80 @@ with aba6:
                 st.session_state.horario_final = pd.DataFrame(resultado)
                 st.success("✨ Solução Encontrada e Gerada!")
             else:
-                st.error("❌ Conflito Inviável! Alguma alteração manual que você fez (ou conflito nas restrições) impede o fecho da grade.")
+                # =========================================================
+                # O DIAGNÓSTICO AVANÇADO (RAIO-X DE RESTRIÇÕES) VOLTOU AQUI
+                # =========================================================
+                st.error("❌ Conflito Inviável! O motor não conseguiu fechar a grade. Veja o diagnóstico abaixo:")
+                st.session_state.horario_final = None
+                
+                max_aulas_semana = num_dias * num_periodos
+                erros_diag = []
+                
+                # Análise de Turmas
+                for t in st.session_state.turmas:
+                    aulas_turma = sum(g.get('aulasSemana', 0) for g in st.session_state.grade if g['turmaId'] == t['id'])
+                    if aulas_turma > max_aulas_semana:
+                        erros_diag.append(f"🏫 **Turma {t['nome']}**: Tem {aulas_turma} aulas na grade, mas a semana só tem {max_aulas_semana} horários.")
+                        
+                # Análise de Professores
+                for prof in st.session_state.professores:
+                    aulas_prof = sum(g.get('aulasSemana', 0) for g in st.session_state.grade if g['professorId'] == prof['id'] or g.get('professorIdSecundario') == prof['id'])
+                    
+                    bloqueios_validos = 0
+                    for ind in prof.get('indisponibilidade', []):
+                        try:
+                            if ind.split('-')[0] in dias:
+                                bloqueios_validos += 1
+                        except: pass
+                            
+                    horarios_livres = max_aulas_semana - bloqueios_validos
+                    
+                    if aulas_prof > horarios_livres:
+                        erros_diag.append(f"👩‍🏫 **Prof(a). {prof['nome']}**: Precisa dar {aulas_prof} aulas na grade, mas só tem {horarios_livres} horários livres marcados na malha (possui {bloqueios_validos} bloqueios).")
+                        
+                if erros_diag:
+                    for e in erros_diag:
+                        st.warning(e)
+                else:
+                    st.warning("🕵️ **Conflito Cruzado Complexo ou Ajuste Manual Impossível:** A matemática individual fecha, mas o cruzamento dos horários ou os **ajustes manuais que fixou** impedem que o quadro seja montado.")
+                    
+                    st.markdown("### 🔍 Raio-X dos Suspeitos (Gargalos)")
+                    st.write("Estes são os professores com as agendas mais 'estranguladas'. Tente libertar horários na malha deles ou limpe os ajustes manuais:")
+                    
+                    prof_stats = []
+                    for prof in st.session_state.professores:
+                        aulas_prof = sum(g.get('aulasSemana', 0) for g in st.session_state.grade if g['professorId'] == prof['id'] or g.get('professorIdSecundario') == prof['id'])
+                        
+                        bloqueios_validos = 0
+                        for ind in prof.get('indisponibilidade', []):
+                            try:
+                                if ind.split('-')[0] in dias:
+                                    bloqueios_validos += 1
+                            except: pass
+                                
+                        horarios_livres = max_aulas_semana - bloqueios_validos
+                        
+                        if aulas_prof > 0 and horarios_livres > 0:
+                            taxa = (aulas_prof / horarios_livres) * 100
+                            prof_stats.append({
+                                'nome': prof['nome'], 
+                                'aulas': aulas_prof, 
+                                'livres': horarios_livres, 
+                                'bloqueios': bloqueios_validos,
+                                'taxa': taxa
+                            })
+                    
+                    prof_stats.sort(key=lambda x: (x['taxa'], x['bloqueios']), reverse=True)
+                    
+                    for p in prof_stats[:5]:
+                        if p['taxa'] >= 80:
+                            cor = "🔴"
+                        elif p['taxa'] >= 60:
+                            cor = "🟠"
+                        else:
+                            cor = "🟡"
+                            
+                        st.markdown(f"{cor} **Prof(a). {p['nome']}**: {p['bloqueios']} horários bloqueados. (Ocupação: **{p['taxa']:.1f}%** ➔ Tem {p['aulas']} aulas para apenas {p['livres']} espaços livres na semana).")
 
     # --- TABELA INTERATIVA (DRAG & DROP SIMULADO) ---
     if st.session_state.get('horario_final') is not None:
