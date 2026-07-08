@@ -14,7 +14,7 @@ from fpdf import FPDF
 # ==========================================
 # 1. CONFIGURAÇÃO VISUAL E CONEXÃO SUPABASE
 # ==========================================
-st.set_page_config(page_title="LioChronos - Horário escolar", page_icon="🧩", layout="wide")
+st.set_page_config(page_title="LioChronos Horário escolar", page_icon="🧩", layout="wide")
 
 st.markdown("""
     <style>
@@ -65,12 +65,23 @@ if not st.session_state['autenticado']:
                     st.session_state['autenticado'] = True
                     st.session_state['cliente_atual'] = usuario
                     
+                    # === CORREÇÃO DE SEGURANÇA: ZERAR MEMÓRIA ANTES DE CARREGAR ===
+                    st.session_state.config = {'dias': ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 'periodos': 9, 'escola_nome': '', 'escola_logo': None}
+                    st.session_state.disciplinas = []
+                    st.session_state.turmas = []
+                    st.session_state.professores = []
+                    st.session_state.grade = []
+                    st.session_state.horario_fixo = []
+                    st.session_state.horario_final = None
+                    st.session_state.edit_grade_id = None
+                    st.session_state.edit_disc_id = None
+                    
                     if banco_ligado:
                         try:
                             resposta = supabase.table('clientes_dados').select("dados").eq("cliente", usuario).execute()
                             if resposta.data:
                                 dados = resposta.data[0]['dados']
-                                st.session_state.config = dados.get('config', {'dias': ['Seg', 'Ter', 'Qua', 'Qui', 'Sex'], 'periodos': 9, 'escola_nome': '', 'escola_logo': None})
+                                st.session_state.config = dados.get('config', st.session_state.config)
                                 st.session_state.disciplinas = dados.get('disciplinas', [])
                                 st.session_state.turmas = dados.get('turmas', [])
                                 st.session_state.professores = dados.get('professores', [])
@@ -114,7 +125,9 @@ def limpar_texto_pdf(texto): return str(texto).replace(" \n", " - ").encode('lat
 with st.sidebar:
     st.header(f"👤 {st.session_state.get('cliente_atual', '').capitalize()}")
     if st.button("Sair (Logout)", use_container_width=True):
-        st.session_state['autenticado'] = False
+        # === CORREÇÃO DE SEGURANÇA: DESTRUIR TODA A MEMÓRIA AO SAIR ===
+        for key in list(st.session_state.keys()):
+            del st.session_state[key]
         st.rerun()
         
     st.markdown("---")
@@ -213,7 +226,6 @@ with aba2:
     if st.session_state.disciplinas:
         st.markdown("---")
         for d in st.session_state.disciplinas:
-            # === NOVA FUNCIONALIDADE: EDITAR DISCIPLINA INLINE ===
             if st.session_state.edit_disc_id == d['id']:
                 with st.container():
                     ec1, ec2, ec3, ec4 = st.columns([4, 2, 1, 1])
@@ -353,7 +365,6 @@ with aba5:
         opcoes_turmas = {t['id']: t['nome'] for t in st.session_state.turmas}
         turma_selecionada = st.selectbox("Selecione a Turma", options=list(opcoes_turmas.keys()), format_func=lambda x: opcoes_turmas[x])
         
-        # === NOVA FUNCIONALIDADE: SOMA TOTAL DE AULAS DA TURMA ===
         grade_turma = [g for g in st.session_state.grade if g['turmaId'] == turma_selecionada]
         total_aulas_turma = sum(g.get('aulasSemana', 0) for g in grade_turma)
         st.info(f"📚 **Total de aulas cadastradas nesta turma:** {total_aulas_turma} aulas semanais.")
@@ -448,7 +459,6 @@ with aba6:
     st.subheader("Processamento e Geração")
     total_aulas = sum(g.get('aulasSemana', 0) for g in st.session_state.grade)
     
-    # === NOVO: PAINEL DE CONTROLE DO MOTOR ===
     st.markdown("### ⚙️ Painel de Controle do Motor")
     col_opt1, col_opt2 = st.columns(2)
     with col_opt1:
@@ -519,7 +529,6 @@ with aba6:
             for req_orig in st.session_state.grade:
                 indices_desta_regra = [i for i, r in enumerate(grade_reqs) if r['id'] == req_orig['id']]
                 
-                # Regra de Aulas Faixa aplicada aqui
                 if aulas_faixa:
                     limite_diario = max(req_orig.get('blocoTamanho', 1), math.ceil(req_orig.get('aulasSemana', 0) / max(1, num_dias)))
                 else:
@@ -572,7 +581,6 @@ with aba6:
             if st.session_state.horario_fixo:
                 for row_fixa in st.session_state.horario_fixo:
                     try:
-                        # Pula a restrição se a aula está na área de "Faltantes/Sem agendamento"
                         if pd.isna(row_fixa.get('Dia')) or pd.isna(row_fixa.get('Período')): continue
                             
                         id_unico = row_fixa['ID_Unico']
@@ -607,7 +615,6 @@ with aba6:
                 st.success("✨ Solução Encontrada com sucesso!")
             else:
                 if forcar_geracao:
-                    # Roda o diagnóstico para entregar as aulas parciais ao utilizador
                     st.warning("⚠️ **Geração Forçada:** O sistema encontrou conflitos impossíveis de resolver (por exemplo, professores sem horários livres suficientes). A construir grade parcial para ajuste manual...")
                     diag_model = cp_model.CpModel()
                     d_vars = {}
@@ -689,7 +696,6 @@ with aba6:
                                 aulas_faltantes += 1
                                 prof_str = get_nome(st.session_state.professores, req['professorId'])
                                 if req.get('professorIdSecundario'): prof_str += f" & {get_nome(st.session_state.professores, req['professorIdSecundario'])}"
-                                # Adiciona a aula no fundo da lista, vazia e com alerta
                                 resultado_parcial.append({
                                     'ID_Unico': req['ID_Unico'],
                                     'Turma': get_nome(st.session_state.turmas, req['turmaId']),
@@ -737,7 +743,6 @@ with aba6:
         st.markdown("---")
         
         # --- EXPORTAÇÃO EXCEL E PDF ---
-        # Filtra aulas não agendadas manualmente para não quebrar a exportação
         df_export = st.session_state.horario_final.dropna(subset=['Dia', 'Período']).copy()
         df_export['Aula'] = df_export['Disciplina'].str.replace("⚠️ ", "") + " \n(" + df_export['Professor'] + ")"
         
